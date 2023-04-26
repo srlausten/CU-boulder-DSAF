@@ -1,4 +1,4 @@
-# CU Boulder Final Project
+# CU Boulder Final Project - Data Science as a Field
 
 ## Files
 
