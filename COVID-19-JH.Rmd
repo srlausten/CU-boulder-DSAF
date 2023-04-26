@@ -1,0 +1,146 @@
+---
+title: "COVID-19 JH Analysis"
+author: "Sam Lausten"
+date: "2023-04-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+The COVID-19 pandemic has been a major health crisis worldwide, affecting millions of people and causing significant economic, social, and psychological consequences. The pandemic is caused by the SARS-CoV-2 virus, which was first identified in Wuhan, China in December 2019. Since then, the virus has spread rapidly across the world, leading to numerous deaths and hospitalizations. In this project, we will import, tidy, and analyze the COVID19 dataset from the Johns Hopkins Github site. We will also perform some visualizations and modeling to gain insights into the data.
+
+```{r imports}
+# Importing necessary libraries
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(lubridate)
+```
+
+## Data Import and Tidying
+We will begin by importing the necessary libraries and loading the COVID19 dataset.
+
+```{r tidying and cleaning, echo=FALSE}
+# Loading the COVID19 dataset
+
+
+url <- "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv"
+covid_data_raw <- read.csv(url, stringsAsFactors = FALSE)
+
+# Extract the dates from the column names
+date_cols <- grep("^X", names(covid_data_raw))
+dates <- as.Date(sub("^X", "", names(covid_data_raw)[date_cols]), format = "%m.%d.%y")
+
+covid_data_tidy <- covid_data_raw %>%
+  pivot_longer(cols = -c(1:4), names_to = "date", values_to = "cases", names_prefix = "X") %>%
+  filter(cases > 0) %>% # remove rows with zero cases
+  mutate(date = as.Date(date, format = "%m.%d.%y"))
+
+# Join the dates to the tidy data
+covid_data_tidy$date <- dates[match(covid_data_tidy$date, dates)]
+
+# Preview the data
+head(covid_data_tidy)
+
+```
+
+## Data Anlysis
+### Total Confirmed Cases and Deaths by Country
+Let's first take a look at the total number of Daily cases per day and also the top 15 countries that contributed to this dataset.
+
+```{r data analysis, echo=TRUE}
+# Grouping the data by country
+covid_data_by_country <- covid_data_tidy %>%
+  group_by(Country.Region, date) %>%
+  summarise(total_cases = sum(cases)) %>%
+  ungroup()
+
+
+# Grouping the data by date
+covid_data_by_date <- covid_data_tidy %>%
+  group_by(date) %>%
+  summarise(total_cases = sum(cases)) %>%
+  ungroup() %>%
+  mutate(daily_cases = c(total_cases[1], diff(total_cases)))
+
+# Filter the top 15 countries by total cases
+top_15_countries <- covid_data_by_country %>%
+  filter(date == max(date)) %>%
+  arrange(desc(total_cases)) %>%
+  slice(1:15) %>%
+  pull(Country.Region)
+
+# Filter the data to only include the top 15 countries
+covid_data_top_15 <- covid_data_by_country %>%
+  filter(Country.Region %in% top_15_countries)
+
+# Create the heatmap
+ggplot(covid_data_top_15, aes(x = date, y = Country.Region, fill = total_cases)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "white", high = "red") +
+  labs(title = "COVID-19 Confirmed Cases by Country and Date",
+       x = "Date",
+       y = "Country",
+       fill = "Cases") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1),
+        axis.text.y = element_text(size = 8),
+        plot.title = element_text(hjust = 0.5))
+
+# Fit a linear regression model to the daily new cases data
+model <- lm(daily_cases ~ as.numeric(date), data = covid_data_by_date)
+
+# Plot the daily new cases with a smooth best-fit line and a linear regression line
+ggplot(covid_data_by_date, aes(x = date, y = daily_cases)) +
+  geom_line(linewidth = 1) +
+  stat_smooth(method = "loess", se = TRUE, fill = "grey", alpha = 0.2) +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b %Y") +
+  labs(title = "Daily New Cases",
+       x = "Date",
+       y = "New Cases") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+## US Data Analsyis 
+This is not apart of the assignment but just extra for my own curiosity.
+
+``` {r US Data Analysis}
+
+
+# Load the data
+us_data <- read.csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us.csv")
+
+# Convert date column to date format
+us_data$date <- as.Date(us_data$date)
+
+
+# Create a new data frame for the stacked area chart
+us_data_recovery <- us_data %>%
+  select(date, cases, deaths) %>%
+  pivot_longer(cols = c("cases", "deaths"), names_to = "status", values_to = "count") %>%
+  group_by(date, status) %>%
+  summarise(count = sum(count)) %>%
+  ungroup()
+
+# Create the stacked area chart
+ggplot(us_data_recovery, aes(x = date, y = count, fill = status)) +
+  geom_area() +
+  labs(title = "COVID-19 Recovery Chart for the United States",
+       x = "Date",
+       y = "Number of Cases",
+       fill = "Status") +
+  scale_x_date(date_breaks = "6 month", date_labels = "%b %Y") +
+  theme(legend.position = "bottom") 
+
+```
+
+## Results 
+To summarize the results, we created three visualizations for COVID-19 data in the United States and Internationally.The first visualization was a line chart showing the daily new cases over time with a smooth best-fit line. The second visualization was a heatmap showing the total confirmed cases by country and date for the top 15 countries. In addition to the visualizations, we also included a linear regression model to predict the number of daily cases in the United States based on time. The final visualization was a stacked area chart showing the number of cases, deaths, and estimated recoveries over time. Overall, these visualizations and models can help provide insights and understanding into the COVID-19 pandemic in the United States.
+
+
+
+

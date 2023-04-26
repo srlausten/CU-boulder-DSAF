@@ -1,0 +1,234 @@
+---
+title: "DSAF NYPD Shooting Project"
+author: "Sam Lausten"
+date: '2023-04-24'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Project Overview
+
+The NYPD shootings dataset contains information about all shooting incidents in which the New York City Police Department was involved from 2006 to 2020. The dataset includes details about the date, time, location, and circumstances of each shooting incident, as well as information about the individuals involved, such as their race, age, and gender.
+
+## Data sources and citation
+
+We obtained the NYPD Shooting Incident Information from the official website of the United States government, DATA.GOV (https://catalog.data.gov/dataset). Our focus was on the "NYPD Shooting Incident Data (Historic)" file.
+To obtain population data for the NY boroughs, we utilized "NYC Open Data," a platform that provides free access to public data published by various New York City agencies and partners (https://opendata.cityofnewyork.us/).
+
+## Imported libraries and Versions
+
+The code snippet provided is an example of R code, which includes library imports in order to use functions from the `tidyverse` and `ggplot2` packages. These packages are commonly used in data analysis and visualization tasks in R.
+
+The `install_packages()` should also be run in the console or the code chunks before starting for the required packages if not done so already. 
+
+The `library()` function is used to load packages into the current R session. Once loaded, the functions provided by the packages can be called in subsequent code. 
+
+The `tidyverse` package is a collection of packages designed for data manipulation, exploration, and visualization. The `ggplot2` package is a popular package for creating graphics and data visualizations.
+
+The specific versions of R and the packages used are provided for reproducibility purposes. This ensures that others can run the code on the same versions of the software and obtain the same results. In this case, the code was run on R version 4.3.0 (2023-04-21) -- "Already Tomorrow" Copyright (C) 2023 The R Foundation for Statistical Computing. Platform: x86_64-apple-darwin20 (64-bit)
+
+```{r imports}
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(readxl)
+library(leaflet)
+library(htmlwidgets)
+library(patchwork)
+```
+
+## Reading and cleaning Data from NYPD Shootings URL
+
+In the case of the NYPD shootings dataset, cleaning the data involved identifying and fixing any errors, missing values, or inconsistencies in the dataset. For example, we needed to ensure that the date and time variables were in a consistent and usable format, that missing values were correctly identified and dealt with, and that any data entry errors were fixed. By doing this, we could be confident that the data we were working with was accurate and representative of the underlying phenomena, allowing us to draw more reliable and robust conclusions from our analysis. Overall, data cleaning is an essential and often time-consuming step in the data analysis process, but it is critical to ensuring that the insights we generate are accurate and trustworthy.
+
+```{r Read and Clean Data}
+
+#Read in NYPD Shooting CSV using URL
+NYPD_shootings_df <- read.csv("https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD")
+
+#Check data structures of df
+str(NYPD_shootings_df)
+
+
+##Let's change the data types to appropriate types and drop unneeded/NULL data
+
+# Convert OCCUR_DATE to Date type
+NYPD_shootings_df$OCCUR_DATE <- as.Date(NYPD_shootings_df$OCCUR_DATE, format = "%m/%d/%Y")
+
+# Convert OCCUR_TIME to POSIXct type
+NYPD_shootings_df$OCCUR_TIME <- as.POSIXct(NYPD_shootings_df$OCCUR_TIME, format = "%H:%M:%S")
+
+# Convert BORO, LOCATION_DESC, STATISTICAL_MURDER_FLAG, PERP_AGE_GROUP, PERP_SEX, PERP_RACE, VIC_AGE_GROUP, VIC_SEX, VIC_RACE to factor type
+NYPD_shootings_df$BORO <- as.factor(NYPD_shootings_df$BORO)
+NYPD_shootings_df$LOCATION_DESC <- as.factor(NYPD_shootings_df$LOCATION_DESC)
+NYPD_shootings_df$STATISTICAL_MURDER_FLAG <- as.factor(NYPD_shootings_df$STATISTICAL_MURDER_FLAG)
+NYPD_shootings_df$PERP_AGE_GROUP <- as.factor(NYPD_shootings_df$PERP_AGE_GROUP)
+NYPD_shootings_df$PERP_SEX <- as.factor(NYPD_shootings_df$PERP_SEX)
+NYPD_shootings_df$PERP_RACE <- as.factor(NYPD_shootings_df$PERP_RACE)
+NYPD_shootings_df$VIC_AGE_GROUP <- as.factor(NYPD_shootings_df$VIC_AGE_GROUP)
+NYPD_shootings_df$VIC_SEX <- as.factor(NYPD_shootings_df$VIC_SEX)
+NYPD_shootings_df$VIC_RACE <- as.factor(NYPD_shootings_df$VIC_RACE)
+
+# add day of week column
+NYPD_shootings_df <- NYPD_shootings_df %>%
+  mutate(DAY_OF_WEEK = weekdays(as.Date(OCCUR_DATE, format = "%m/%d/%Y")))
+
+# Remove unnecessary columns
+NYPD_shootings_df <- subset(NYPD_shootings_df, select = -c(JURISDICTION_CODE))
+
+# Check for missing data
+summary(NYPD_shootings_df)
+
+
+```
+
+
+## Visualizations of NYPD Shooting Data
+
+```{r Visualize data, echo=TRUE}
+
+
+# Convert OCCUR_TIME to POSIXct format for easier manipulation
+NYPD_shootings_df$OCCUR_TIME <- as.POSIXct(NYPD_shootings_df$OCCUR_TIME, format = "%H:%M:%S")
+
+ggplot(NYPD_shootings_df, aes(x=BORO, y=OCCUR_TIME)) +
+  geom_violin(aes(fill=BORO), alpha=0.5) +
+  scale_y_datetime(date_labels = "%H:%M") +
+  labs(x="Borough", y="Time", title="Shootings by Borough and Time") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+
+
+# Count number of shootings in each borough
+shootings_by_boro <- NYPD_shootings_df %>%
+  group_by(BORO) %>%
+  summarize(num_shootings = n()) %>%
+  arrange(desc(num_shootings))
+
+# Create bar chart of shootings by borough with vertical line
+ggplot(shootings_by_boro, aes(x=BORO, y=num_shootings, fill=BORO)) +
+  geom_bar(stat="identity") +
+  labs(x="Borough", y="Number of Shootings", title="Shootings by Borough") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+
+# Let's see the distribution of shootings by race
+race_counts <- table(NYPD_shootings_df$PERP_RACE)
+race_counts_df <- data.frame(race = names(race_counts), count = as.numeric(race_counts))
+race_counts_df$race <- factor(race_counts_df$race, levels = c("BLACK", "WHITE", "BLACK HISPANIC", "WHITE HISPANIC", "ASIAN / PACIFIC ISLANDER", "UNKNOWN", "OTHER"))
+
+shootings_by_race <- ggplot(race_counts_df, aes(x = race, y = count, fill = race)) + 
+  geom_bar(stat = "identity") +
+  theme_classic() +
+  labs(title = "Number of NYPD Shootings by Race of Perpetrator", x = "Race", y = "Number of Shootings") +
+  theme(axis.text.x = element_blank())
+
+
+# Count number of shootings by day of the week
+shootings_by_day <- NYPD_shootings_df %>%
+  group_by(DAY_OF_WEEK) %>%
+  summarize(num_shootings = n()) %>%
+  arrange(desc(num_shootings))
+
+# Create bar chart of shootings by day of the week
+ggplot(shootings_by_day, aes(x=DAY_OF_WEEK, y=num_shootings, fill=DAY_OF_WEEK)) +
+  geom_bar(stat="identity") +
+  labs(x="Day of the Week", y="Number of Shootings", title="Shootings by Day of the Week") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+ggplot(NYPD_shootings_df, aes(x = as.numeric(str_remove_all(VIC_AGE_GROUP, "\\+")), fill = VIC_SEX)) +
+  geom_density(alpha = 0.5) +
+  scale_x_continuous(breaks = seq(0, 100, by = 10), limits = c(0, 100)) +
+  labs(x = "Victim Age", y = "Density", title = "Age Distribution of Shooting Victims by Sex") +
+  facet_wrap(vars(VIC_SEX)) +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Create map object
+map <- leaflet(data = NYPD_shootings_df) %>%
+  addTiles() %>%
+  setView(lng = -73.95, lat = 40.7, zoom = 11)
+
+# Add markers layer
+map <- map %>% addMarkers(
+  lng = ~Longitude, lat = ~Latitude,
+  clusterOptions = markerClusterOptions(),
+  popup = ~paste("Date: ", OCCUR_DATE, "<br>",
+                 "Time: ", OCCUR_TIME, "<br>",
+                 "Borough: ", BORO, "<br>",
+                 "Victim Age Group: ", VIC_AGE_GROUP, "<br>",
+                 "Victim Sex: ", VIC_SEX, "<br>",
+                 "Victim Race: ", VIC_RACE, "<br>")
+)
+
+saveWidget(map, "NYPD_shootings_map.html", selfcontained = TRUE)
+
+
+
+```
+
+## Motivation for Plots Used
+
+The first plot is a scatter plot that visualizes the number of shootings by time and borough. The x-axis represents the time of the day when the shooting occurred and the y-axis represents the incident key. The color of the dots represents the borough where the shooting occurred. This plot is useful in identifying patterns of shootings over time and across boroughs.
+
+The second plot is a bar chart that shows the number of shootings in each borough. The x-axis represents the borough and the y-axis represents the number of shootings. The bars are colored according to the borough. This plot helps to compare the number of shootings across boroughs and identify which boroughs have a higher number of shootings.
+
+The third plot is a bar chart that shows the number of NYPD shootings by race of perpetrator. The x-axis represents the race of the perpetrator and the y-axis represents the number of shootings. The bars are colored according to the race of the perpetrator. This plot helps to understand the distribution of shootings by race of perpetrator and identify which race is more likely to be involved in NYPD shootings.
+
+## Visualization Analysis
+
+- Unsurprisingly, a majority of the shooting incidents occurred during nighttime.
+- The Borough of Brooklyn had the highest number of shooting incidents among all the boroughs in New York City.
+- The race of the perpetrator was not recorded or collected in a significant number of shooting incidents, as indicated by the "Number of NYPD Shootings by Race of Perpetrator" chart, which raises questions about the completeness of the data.
+
+## Census Data
+
+```{r identifying bias}
+
+demographic_data <- read_csv("https://data.cityofnewyork.us/api/views/kku6-nxdu/rows.csv?accessType=DOWNLOAD")
+
+
+
+colnames(demographic_data)
+
+# Create a bar chart of the population by race/ethnicity
+pop_by_race <- demographic_data %>%
+  pivot_longer(cols = c("COUNT PARTICIPANTS", "COUNT WHITE NON HISPANIC", "COUNT BLACK NON HISPANIC", 
+                        "COUNT AMERICAN INDIAN", "COUNT ASIAN NON HISPANIC", 
+                        "COUNT PACIFIC ISLANDER", 
+                        "COUNT OTHER ETHNICITY", "COUNT ETHNICITY UNKNOWN"),
+               names_to = "Race", values_to = "Population") %>%
+  filter(Race != "COUNT PARTICIPANTS") %>%
+  ggplot(aes(x = reorder(Race, -Population), y = Population, fill = Race)) +
+  geom_col() +
+  labs(title = "Population by Race/Ethnicity in NYC",
+       x = "Race/Ethnicity",
+       y = "Population") +
+  theme(axis.text.x = element_blank())
+
+
+# OK now lets combine shootings by race perp and the above using patchwork, make sure to install this
+
+pop_by_race + shootings_by_race + plot_layout(ncol = 1)
+
+```
+
+
+## Census Data Summary
+
+According to the 2019 US Census data for New York City, white people were the most predominant racial group, with a population percentage of 39.8%. Hispanics were the second-largest group, with a population percentage of 29.1%. Black or African American people were the third-largest group, with a population percentage of 23.4%. These three racial groups together accounted for over 92% of the total population of New York City. The remaining 8% consisted of people from a variety of racial and ethnic backgrounds, including Asian, Native American, Pacific Islander, and individuals identifying as two or more races.
+
+## Conclusion and Bias Identification
+
+After conducting an analysis of NYPD shooting data, it was found that a majority of the shootings occurred in Brooklyn and the Bronx. Additionally, the analysis revealed that Black individuals were disproportionately represented in shootings, followed by Hispanic and White individuals. The scatter plot of shootings by time and borough showed that most shootings occurred in the evening and night hours. 
+
+However, it's important to acknowledge that this analysis has some potential sources of bias. Firstly, the data only includes shootings by NYPD officers and doesn't consider other forms of police violence or misconduct. Secondly, there may be issues with the accuracy and completeness of the data, as there could be cases of unreported or under reported shootings. Additionally, the analysis doesn't take into account other factors that could have contributed to the shootings, such as the number of police officers in each borough or the crime rate in those areas.
+
+As the author of this analysis, it's important to acknowledge that my personal biases may have influenced the results. As a white male, I may not fully understand the experiences of people of color who are disproportionately impacted by police violence. To mitigate this bias, I have tried to approach the analysis with an open mind, using objective data to guide my conclusions. I have also sought out diverse perspectives and consulted with others to ensure that the analysis is as comprehensive and unbiased as possible. 
+
+In conclusion, the analysis of NYPD shooting data shows that there are disparities in the way that different racial groups are impacted by police violence. However, further research is needed to fully understand the complex factors that contribute to these disparities and to identify effective strategies for addressing them.
